@@ -105,6 +105,38 @@ erDiagram
         string change_reason
     }
 
+    EXPENSES {
+        string expense_id PK
+        string activity_id FK
+        string expense_category
+        string expense_name
+        int amount
+        date expense_date
+        string status
+        string note
+        datetime cancelled_at
+        string cancelled_by
+        string cancellation_reason
+        datetime created_at
+        string created_by
+        datetime updated_at
+        string updated_by
+    }
+
+    EXPENSE_ADVANCES {
+        string advance_id PK
+        string expense_id FK
+        string person_id FK
+        int amount
+        string payment_method
+        datetime paid_at
+        string note
+        datetime created_at
+        string created_by
+        datetime updated_at
+        string updated_by
+    }
+
     PERSONS ||--o{ EXTERNAL_ACCOUNTS : "has"
     PERSONS ||--o{ CLASSROOM_MEMBERSHIPS : "belongs to"
     CLASSROOMS ||--o{ CLASSROOM_MEMBERSHIPS : "has"
@@ -113,6 +145,10 @@ erDiagram
     PERSONS ||--o{ PARTICIPATIONS : "participates"
     ACTIVITIES ||--o{ PARTICIPATIONS : "has"
     PARTICIPATIONS ||--o{ PARTICIPATION_STATUS_HISTORY : "has history"
+
+    ACTIVITIES ||--o{ EXPENSES : "has"
+    EXPENSES ||--o{ EXPENSE_ADVANCES : "has advances"
+    PERSONS ||--o{ EXPENSE_ADVANCES : "advances"
 ```
 
 ## Responsibility
@@ -124,6 +160,8 @@ erDiagram
 - `ACTIVITIES`: 稽古・茶会・イベント等の開催情報
 - `PARTICIPATIONS`: 人物ごとの参加種別・参加予定・参加実績
 - `PARTICIPATION_STATUS_HISTORY`: 参加予定の変更履歴
+- `EXPENSES`: 稽古・イベント等で発生した経費そのもの
+- `EXPENSE_ADVANCES`: 経費に対して誰がいくら立て替えたか
 
 ## Current business rules
 
