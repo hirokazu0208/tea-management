@@ -58,9 +58,28 @@ erDiagram
         string updated_by
     }
 
+    ACTIVITIES {
+        string activity_id PK
+        string classroom_id FK
+        string activity_type
+        string title
+        datetime start_at
+        datetime end_at
+        string location
+        string status
+        datetime attendance_deadline_at
+        int preparation_count
+        string note
+        datetime created_at
+        string created_by
+        datetime updated_at
+        string updated_by
+    }
+
     PERSONS ||--o{ EXTERNAL_ACCOUNTS : "has"
     PERSONS ||--o{ CLASSROOM_MEMBERSHIPS : "belongs to"
     CLASSROOMS ||--o{ CLASSROOM_MEMBERSHIPS : "has"
+    CLASSROOMS ||--o{ ACTIVITIES : has
 ```
 
 ## Responsibility
