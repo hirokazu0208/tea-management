@@ -1,6 +1,9 @@
-# ER Diagram v0.1
+# ER Diagram v0.3
 
-茶道教室管理システムの初期データモデル。
+茶道教室管理システムのデータモデル。
+
+v0.3では、稽古・イベントへの参加予定・参加実績・出欠変更履歴を管理するため、
+`PARTICIPATIONS` および `PARTICIPATION_STATUS_HISTORY` を追加する。
 
 ```mermaid
 erDiagram
@@ -76,10 +79,40 @@ erDiagram
         string updated_by
     }
 
+    PARTICIPATIONS {
+        string participation_id PK
+        string activity_id FK
+        string person_id FK
+        string participation_type
+        string planned_status
+        datetime responded_at
+        string actual_status
+        datetime actual_recorded_at
+        string note
+        datetime created_at
+        string created_by
+        datetime updated_at
+        string updated_by
+    }
+
+    PARTICIPATION_STATUS_HISTORY {
+        string history_id PK
+        string participation_id FK
+        string old_status
+        string new_status
+        datetime changed_at
+        string changed_by
+        string change_reason
+    }
+
     PERSONS ||--o{ EXTERNAL_ACCOUNTS : "has"
     PERSONS ||--o{ CLASSROOM_MEMBERSHIPS : "belongs to"
     CLASSROOMS ||--o{ CLASSROOM_MEMBERSHIPS : "has"
-    CLASSROOMS ||--o{ ACTIVITIES : has
+    CLASSROOMS ||--o{ ACTIVITIES : "has"
+
+    PERSONS ||--o{ PARTICIPATIONS : "participates"
+    ACTIVITIES ||--o{ PARTICIPATIONS : "has"
+    PARTICIPATIONS ||--o{ PARTICIPATION_STATUS_HISTORY : "has history"
 ```
 
 ## Responsibility
@@ -88,12 +121,54 @@ erDiagram
 - `EXTERNAL_ACCOUNTS`: LINE等の外部アカウント
 - `CLASSROOMS`: 教室そのもの
 - `CLASSROOM_MEMBERSHIPS`: 人と教室の所属関係
+- `ACTIVITIES`: 稽古・茶会・イベント等の開催情報
+- `PARTICIPATIONS`: 人物ごとの参加種別・参加予定・参加実績
+- `PARTICIPATION_STATUS_HISTORY`: 参加予定の変更履歴
 
 ## Current business rules
+
+### Membership
 
 - 本籍生徒は `REGULAR_MEMBER`
 - 先生は `TEACHER`
 - 所属状態は `ACTIVE / ON_LEAVE / WITHDRAWN`
 - 管理者権限は所属種別とは分離する
-- 体験者・見学者は教室所属ではなく、将来 `participations` で管理する
-- 場所代・先生送迎費は原則として `ACTIVE` な本籍生徒全員を按分対象とする
+
+### Participation
+
+参加種別：
+
+- `TEACHER`
+- `REGULAR`
+- `TRIAL`
+- `VISITOR`
+
+予定出欠：
+
+- `ATTENDING`
+- `ABSENT`
+- `UNDECIDED`
+- `UNANSWERED`
+
+実績出欠：
+
+- `ATTENDED`
+- `ABSENT`
+- `NO_SHOW`
+
+- 教室への所属と、個々の稽古への参加は分離して管理する
+- 予定出欠と実際の参加実績は分離する
+- 出欠回答期限後も変更可能とする
+- 出欠変更は履歴として保持する
+- 当日参加にも対応する
+- 体験者・見学者も個々の稽古への参加者として管理できる
+- 先生も個々の稽古への参加者として管理できる
+- 同一人物を同一activityへ重複登録しない
+- 稽古そのものの休講は `ACTIVITIES.status = CANCELLED` として扱う
+
+### Expenses
+
+- 稽古への参加と費用負担は分離して管理する
+- 先生は共通費用について原則負担対象外とする
+- 体験・見学等の費用ルールは参加種別等に基づいて別途判定する
+- 費用ごとに負担対象者を決定できる設計とする
