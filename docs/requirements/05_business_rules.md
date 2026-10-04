@@ -1117,18 +1117,37 @@ ACTIVE、ON_LEAVE、WITHDRAWN の状態を判定できるようにする。
 
 ### BR-EVD-004 証憑の状態遷移
 
-- 証憑候補は、受信後から確定または却下までの状態を管理する。
+- 証憑候補は、受信後から確認、却下、無効化までの状態を管理する。
 - MVPにおける証憑の基本状態は以下とする。
   - `RECEIVED`: 証憑候補を受信した状態
   - `REVIEW_REQUIRED`: OCR / AI解析後、または手動入力により管理者確認を待っている状態
-  - `CONFIRMED`: 管理者が証憑として確認した状態
-  - `REJECTED`: 誤送信、経費と無関係、重複等により却下した状態
-- 基本的な状態遷移は `RECEIVED → REVIEW_REQUIRED → CONFIRMED / REJECTED` とする。
+  - `CONFIRMED`: 権限を持つ利用者が証憑として確認した状態
+  - `REJECTED`: 確定前に、誤送信、経費と無関係、重複等により却下した状態
+  - `INVALIDATED`: 一度CONFIRMEDとなった証憑について、後から誤り等が判明し、証憑として無効化した状態
+
+- 基本的な状態遷移は以下とする。
+
+  `RECEIVED → REVIEW_REQUIRED → CONFIRMED`
+
+  または
+
+  `RECEIVED → REVIEW_REQUIRED → REJECTED`
+
+  確定済み証憑を後から無効化する場合は、
+
+  `CONFIRMED → INVALIDATED`
+
+  とする。
+
+- `REJECTED` は、原則として証憑として確定する前の却下に使用する。
+- `INVALIDATED` は、原則として一度 `CONFIRMED` となった証憑を後から無効化する場合に使用する。
+- `CONFIRMED` となった証憑を後から無効化する場合、`REJECTED` へ変更せず `INVALIDATED` とする。
 - OCR / AI解析に失敗した場合でも証憑自体を失敗状態にはせず、`REVIEW_REQUIRED` として手動入力・確認を可能とする。
 - OCR / AI解析処理の成功・失敗と、証憑そのものの業務状態は分離して管理する。
-- `CONFIRMED` への変更は、権限を持つ利用者の確認操作によって行う。
-- `REJECTED` とした証憑も物理削除せず、却下日時、却下者、却下理由を追跡できるようにする。
-- `CONFIRMED` または `REJECTED` となった後の訂正についても、履歴を失わない方法で扱う。
+- `CONFIRMED` への変更は、確定権限を持つ利用者の確認操作によって行う。
+- `REJECTED` または `INVALIDATED` となった証憑も原則として物理削除しない。
+- 状態変更時は、変更前状態、変更後状態、変更日時、変更者および必要に応じて変更理由を履歴として保持する。
+- `EVIDENCES.status` は現在状態を保持し、状態変更履歴は `EVIDENCE_STATUS_HISTORY` で管理する。
 
   ### BR-EVD-005 証憑と証憑ファイルの管理単位
 
