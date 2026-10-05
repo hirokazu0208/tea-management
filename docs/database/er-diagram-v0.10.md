@@ -1,38 +1,25 @@
-# ER Diagram v0.9
+# ER Diagram v0.10
 
 茶道教室管理システムのデータモデル。
 
-v0.9では、経費精算に関連する証憑管理を追加する。
-
-領収書、利用明細、Web明細、スクリーンショット等の証憑について、
-業務上の証憑、物理ファイル、OCR / AI解析結果、経費との関連を
-それぞれ分離して管理する。
+v0.10では、v0.9の証憑管理モデルを維持した上で、
+Role / Permissionによる認可（RBAC）モデルを追加する。
 
 以下のエンティティを追加する。
 
-- `EVIDENCES`
-  - 証憑という業務上のまとまりを管理する
-- `EVIDENCE_FILES`
-  - 証憑に関連する画像・PDF等の物理ファイルを管理する
-- `EVIDENCE_ANALYSES`
-  - OCR / AI解析結果および解析履歴を管理する
-- `EXPENSE_EVIDENCE_LINKS`
-  - 証憑と経費のN:Mの関連を管理する
-- `EVIDENCE_STATUS_HISTORY`
-  - 証憑の状態変更履歴を管理する
-    
-証憑の確認状態、OCR / AIの解析状態、経費の確定状態は
-それぞれ独立して管理する。
+- `ROLES`
+  - システム上のRoleを管理する
+- `PERMISSIONS`
+  - システム上で実行可能な操作を管理する
+- `ROLE_PERMISSIONS`
+  - Roleに含まれるPermissionを管理する
+- `MEMBERSHIP_ROLES`
+  - 教室所属ごとのRole付与・解除および履歴を管理する
 
-OCR / AIによる解析結果は候補情報として扱い、
-解析成功のみを理由として証憑または経費を自動確定しない。
+Roleは人物へ直接付与せず、
+`CLASSROOM_MEMBERSHIPS` に対して付与する。
 
-また、証憑と経費はN:Mで関連付け可能とし、
-1つの証憑から複数の経費を登録する場合、
-および1つの経費を複数の証憑で裏付ける場合の双方に対応する。
-
-v0.8で追加した `CLASSROOM_FEE_SETTINGS` を含む
-既存の料金・請求・入金モデルは引き続き維持する。
+これにより、同一人物が教室ごとに異なるRoleを持てる構造とする。
 
 
 ```mermaid
@@ -368,6 +355,44 @@ REFUNDS {
     string updated_by
 }
 
+ROLES {
+    INTEGER role_id PK
+    TEXT role_code UK
+    TEXT role_name
+    TEXT description
+    TEXT created_at
+    TEXT updated_at
+}
+
+PERMISSIONS {
+    INTEGER permission_id PK
+    TEXT permission_code UK
+    TEXT permission_name
+    TEXT description
+    TEXT created_at
+    TEXT updated_at
+}
+
+ROLE_PERMISSIONS {
+    INTEGER role_permission_id PK
+    INTEGER role_id FK
+    INTEGER permission_id FK
+    TEXT created_at
+}
+
+MEMBERSHIP_ROLES {
+    INTEGER membership_role_id PK
+    INTEGER membership_id FK
+    INTEGER role_id FK
+    TEXT granted_at
+    INTEGER granted_by_person_id FK
+    TEXT revoked_at
+    INTEGER revoked_by_person_id FK
+    TEXT change_reason
+    TEXT created_at
+    TEXT updated_at
+}
+
     PERSONS ||--o{ EXTERNAL_ACCOUNTS : "has"
     PERSONS ||--o{ CLASSROOM_MEMBERSHIPS : "belongs to"
     CLASSROOMS ||--o{ CLASSROOM_MEMBERSHIPS : "has"
@@ -400,25 +425,33 @@ REFUNDS {
 
     PAYMENTS ||--o{ REFUNDS : refunds
 
-CLASSROOMS ||--o{ EVIDENCES : has
-
-PERSONS ||--o{ EVIDENCES : submits
-PERSONS ||--o{ EVIDENCES : confirms
-PERSONS ||--o{ EVIDENCES : rejects
-PERSONS ||--o{ EVIDENCES : invalidates
-
-EVIDENCES ||--o{ EVIDENCE_FILES : has
-EVIDENCES ||--o{ EVIDENCE_ANALYSES : has
-
-EVIDENCES ||--o{ EXPENSE_EVIDENCE_LINKS : supports
-EXPENSES ||--o{ EXPENSE_EVIDENCE_LINKS : evidenced_by
-
-PERSONS ||--o{ EXPENSE_EVIDENCE_LINKS : creates
-PERSONS ||--o{ EXPENSE_EVIDENCE_LINKS : removes
-
-EVIDENCES ||--o{ EVIDENCE_STATUS_HISTORY : has_history
-PERSONS ||--o{ EVIDENCE_STATUS_HISTORY : changes
-
+  CLASSROOMS ||--o{ EVIDENCES : has
+  
+  PERSONS ||--o{ EVIDENCES : submits
+  PERSONS ||--o{ EVIDENCES : confirms
+  PERSONS ||--o{ EVIDENCES : rejects
+  PERSONS ||--o{ EVIDENCES : invalidates
+  
+  EVIDENCES ||--o{ EVIDENCE_FILES : has
+  EVIDENCES ||--o{ EVIDENCE_ANALYSES : has
+  
+  EVIDENCES ||--o{ EXPENSE_EVIDENCE_LINKS : supports
+  EXPENSES ||--o{ EXPENSE_EVIDENCE_LINKS : evidenced_by
+  
+  PERSONS ||--o{ EXPENSE_EVIDENCE_LINKS : creates
+  PERSONS ||--o{ EXPENSE_EVIDENCE_LINKS : removes
+  
+  EVIDENCES ||--o{ EVIDENCE_STATUS_HISTORY : has_history
+  PERSONS ||--o{ EVIDENCE_STATUS_HISTORY : changes
+  
+  CLASSROOM_MEMBERSHIPS ||--o{ MEMBERSHIP_ROLES : has
+  ROLES ||--o{ MEMBERSHIP_ROLES : assigned_as
+  
+  ROLES ||--o{ ROLE_PERMISSIONS : has
+  PERMISSIONS ||--o{ ROLE_PERMISSIONS : includes
+  
+  PERSONS ||--o{ MEMBERSHIP_ROLES : grants
+  PERSONS ||--o{ MEMBERSHIP_ROLES : revokes
 ```
 
 ## Responsibility
@@ -444,7 +477,11 @@ PERSONS ||--o{ EVIDENCE_STATUS_HISTORY : changes
 - `EVIDENCE_ANALYSES`: 証憑に対するOCR / AI解析の実行結果、候補値、解析状態および再解析履歴を管理する
 - `EXPENSE_EVIDENCE_LINKS`: 証憑と経費のN:Mの関連、および関連解除履歴を管理する
 - `EVIDENCE_STATUS_HISTORY`: 証憑の状態変更について、変更前後の状態、変更日時、変更者、変更理由を履歴として管理する
-
+- `ROLES`: システム上のRole（Permissionの集合）を管理する
+- `PERMISSIONS`: システム上で実行可能な操作を管理する
+- `ROLE_PERMISSIONS`: Roleに含まれるPermissionの関連を管理する
+- `MEMBERSHIP_ROLES`: 教室所属ごとのRole付与・解除、およびその履歴を管理する
+  
  
 ## Current business rules
 
@@ -742,3 +779,78 @@ DBの通常の外部キー制約は設定せず、Service層で参照整合性�
 - RoleはPermissionの集合を表す。
 - Roleそのものを `PERSONS` に直接付与しない。
 - 教室におけるRoleの付与は、後述する `MEMBERSHIP_ROLES` で管理する。
+
+## PERMISSIONS
+
+システム上で実行可能な操作をPermissionとして管理する。
+
+| カラム | 型 | NULL | 説明 |
+|---|---|---|---|
+| permission_id | INTEGER | NOT NULL | Permission ID（PK） |
+| permission_code | TEXT | NOT NULL | Permissionコード |
+| permission_name | TEXT | NOT NULL | Permission表示名 |
+| description | TEXT | NULL | Permissionの説明 |
+| created_at | TEXT | NOT NULL | 作成日時 |
+| updated_at | TEXT | NOT NULL | 更新日時 |
+
+### 制約
+
+- `permission_id` を主キーとする。
+- `permission_code` は一意とする。
+- Permissionは「誰であるか」ではなく「何を実行できるか」を表す。
+- Role名を直接使用して業務操作の可否を判定せず、必要なPermissionの有無によって認可する。
+- MVPでは `BR-AUTH-003` で定義したPermissionを基本として登録する。
+- Permissionの追加によって、将来の機能追加に対応できる構造とする。
+
+## ROLE_PERMISSIONS
+
+Roleに含まれるPermissionを管理する。
+
+| カラム | 型 | NULL | 説明 |
+|---|---|---|---|
+| role_permission_id | INTEGER | NOT NULL | Role-Permission関連ID（PK） |
+| role_id | INTEGER | NOT NULL | Role ID（FK → ROLES.role_id） |
+| permission_id | INTEGER | NOT NULL | Permission ID（FK → PERMISSIONS.permission_id） |
+| created_at | TEXT | NOT NULL | 作成日時 |
+
+### 制約
+
+- `role_permission_id` を主キーとする。
+- `role_id` は `ROLES.role_id` を参照する。
+- `permission_id` は `PERMISSIONS.permission_id` を参照する。
+- 同一の `role_id` と `permission_id` の組み合わせを重複登録しない。
+- 1つのRoleに複数のPermissionを設定できる。
+- 1つのPermissionを複数のRoleに設定できる。
+- MVPでは `BR-AUTH-002` および `BR-AUTH-003` で定義したRole / Permission構成を基本とする。
+
+## MEMBERSHIP_ROLES
+
+教室所属（Membership）に付与されたRoleと、その付与・解除履歴を管理する。
+
+| カラム | 型 | NULL | 説明 |
+|---|---|---|---|
+| membership_role_id | INTEGER | NOT NULL | Membership-Role関連ID（PK） |
+| membership_id | INTEGER | NOT NULL | 教室所属ID（FK → CLASSROOM_MEMBERSHIPS.membership_id） |
+| role_id | INTEGER | NOT NULL | Role ID（FK → ROLES.role_id） |
+| granted_at | TEXT | NOT NULL | Role付与日時 |
+| granted_by_person_id | INTEGER | NOT NULL | Roleを付与した人物ID（FK → PERSONS.person_id） |
+| revoked_at | TEXT | NULL | Role解除日時 |
+| revoked_by_person_id | INTEGER | NULL | Roleを解除した人物ID（FK → PERSONS.person_id） |
+| change_reason | TEXT | NULL | 付与・解除理由 |
+| created_at | TEXT | NOT NULL | 作成日時 |
+| updated_at | TEXT | NOT NULL | 更新日時 |
+
+### 制約
+
+- `membership_role_id` を主キーとする。
+- `membership_id` は `CLASSROOM_MEMBERSHIPS.membership_id` を参照する。
+- `role_id` は `ROLES.role_id` を参照する。
+- `granted_by_person_id` は `PERSONS.person_id` を参照する。
+- `revoked_by_person_id` は `PERSONS.person_id` を参照する。
+- `revoked_at IS NULL` のレコードを現在有効なRole付与として扱う。
+- Roleを解除する場合もレコードを物理削除せず、`revoked_at`、`revoked_by_person_id`、必要に応じて `change_reason` を記録する。
+- 一度解除したRoleを再付与する場合は、過去のレコードを再利用せず、新しい `MEMBERSHIP_ROLES` レコードを作成する。
+- 同一Membershipに複数のRoleを付与できる。
+- 同一Membership・同一Roleについて、同時に複数の有効なRole付与が存在しないようにする。
+- Roleの有効性は、対象MembershipおよびRole付与の状態を基に判定する。
+- `ADMIN` Roleの解除時は、`BR-AUTH-006` に従い、その教室の有効なADMINが0名にならないことを確認する。
