@@ -1179,8 +1179,10 @@ ACTIVE、ON_LEAVE、WITHDRAWN の状態を判定できるようにする。
 - MVPでは、管理者が証憑を登録できるものとする。
 - 将来的には、先生や許可された会員等からの証憑登録にも拡張できるものとする。
 - 証憑を登録した利用者自身であっても、確定権限を持たない場合は証憑・経費を確定できない。
-- `CONFIRMED` への変更は、確定権限を持つ利用者のみ行えるものとする。
-- `REJECTED` への変更も、原則として確認権限を持つ利用者が行う。
+- `CONFIRMED` への変更は、`EVIDENCE_CONFIRM` を持つ利用者のみ行えるものとする。
+- 確定前の証憑を `REJECTED` へ変更できるのは、`EVIDENCE_REJECT` を持つ利用者とする。
+- 一度 `CONFIRMED` となった証憑を `INVALIDATED` へ変更できるのは、`EVIDENCE_INVALIDATE` を持つ利用者とする。
+- `REJECTED` と `INVALIDATED` は異なる業務操作として扱い、それぞれ必要なPermissionを分離する。
 - 誰が証憑を登録したか、誰が確認・確定・却下したかを追跡できるようにする。
 - LINE経由の登録についても、LINEアカウントとシステム上の人物・権限を確認した上で受け付ける。
 - 権限を確認できないLINEアカウントから受信した画像を、自動的に経費登録・確定しない。
@@ -1305,3 +1307,258 @@ ACTIVE、ON_LEAVE、WITHDRAWN の状態を判定できるようにする。
 - どの証憑を根拠として経費を確認・確定したかを追跡できるものとする。
 - 関連する証憑の一部が `REJECTED` または取消となっても、他の有効な証憑および確定済み経費を自動的に取消・変更しない。
 - 証憑の追加・関連解除を行った場合も、その操作履歴を追跡できるようにする。
+
+# 権限・認可（RBAC）業務ルール
+
+### BR-AUTH-001 人物・教室上の立場・システム権限の分離
+
+- 人物そのもの、教室における立場、システム上のRoleおよびPermissionは、それぞれ別の概念として管理する。
+- 人物そのものは `PERSONS` で管理する。
+- 教室との所属関係および教室上の立場は `CLASSROOM_MEMBERSHIPS` で管理する。
+- システム上のRoleは、利用者に付与するPermissionの集合として扱う。
+- Permissionは、システム上で実行可能な操作を表す。
+- `TEACHER` や `REGULAR_MEMBER` 等の教室上の立場だけを理由として、システム操作を直接許可・拒否しない。
+- 実際の認可判定は、対象教室において利用者が有効なRoleを通じて必要なPermissionを保持しているかを基準とする。
+- 同一人物が、教室上は `REGULAR_MEMBER` でありながら、システム上では `ADMIN` Roleを持つことを許容する。
+- 将来、教室上の立場を変更しても、Role / Permissionの設計を独立して変更できる構造とする。
+
+### BR-AUTH-002 MVPにおけるRole定義
+
+- MVPでは、システム上の基本Roleとして以下の3種類を定義する。
+  - `ADMIN`
+  - `TEACHER`
+  - `MEMBER`
+
+- `ADMIN` は、教室運営およびシステム管理を担当するRoleとし、MVPでは原則として当該教室の全管理Permissionを持つ。
+
+- `TEACHER` は、先生向けの教室運営Roleとし、主として以下の業務に必要なPermissionを持つ。
+  - 稽古・イベント予定の管理
+  - 出欠の確認・管理
+  - 月謝状況の確認
+  - 月謝入金の登録
+  - 「今月の一言」の登録・変更
+  - 教室からのお知らせ
+  - 許可された通知の送信
+
+- `TEACHER` は、原則として以下の管理Permissionを持たない。
+  - 共有費・経費の確定および取消
+  - 費用按分の確定・変更
+  - 証憑の閲覧・確定・却下・無効化
+  - Role / Permissionの管理
+
+- `MEMBER` は一般会員向けRoleとし、原則として以下のような自分自身に関係する操作を行う。
+  - 教室予定の閲覧
+  - 自分の出欠登録・変更
+  - 自分の月謝状況の閲覧
+  - 自分の共有費・精算状況の閲覧
+
+- RoleはPermissionの集合として扱い、実際の認可判定はRole名そのものではなく、必要なPermissionの有無を基準とする。
+
+- 1つのMembershipに複数のRoleを付与できるものとする。
+
+- 複数Roleを持つ場合、MVPでは各Roleが持つPermissionの和集合を、そのMembershipの有効Permissionとする。
+
+- MVPでは明示的なDENY（拒否Permission）は導入しない。
+
+- MVPでは人物またはMembershipへのPermissionの直接付与は行わず、Roleを通じてPermissionを付与する。
+
+- 将来、補助管理者、会計担当等が必要になった場合、新しいRoleを追加できる構造とする。
+
+### BR-AUTH-003 MVPにおけるPermission定義
+
+- Permissionは、利用者がシステム上で実行できる操作を表す。
+- MVPでは、以下のPermissionを基本とする。
+
+#### 稽古・予定
+
+- `ACTIVITY_VIEW`
+  - 稽古・イベント予定を閲覧する。
+- `ACTIVITY_CREATE`
+  - 稽古・イベント予定を登録する。
+- `ACTIVITY_UPDATE`
+  - 稽古・イベント予定を変更する。
+- `ACTIVITY_CANCEL`
+  - 稽古・イベントを休講・取消にする。
+
+#### 出欠
+
+- `OWN_ATTENDANCE_UPDATE`
+  - 自分自身の出欠予定を登録・変更する。
+- `ATTENDANCE_VIEW_ALL`
+  - 教室全体の出欠情報を閲覧する。
+- `ATTENDANCE_MANAGE`
+  - 他の参加者を含む出欠予定・実績を登録・変更する。
+
+#### 月謝・請求
+
+- `OWN_TUITION_VIEW`
+  - 自分自身の月謝・未収状況を閲覧する。
+- `TUITION_VIEW_ALL`
+  - 教室全体の月謝・未収状況を閲覧する。
+- `TUITION_CHARGE_MANAGE`
+  - 月謝請求の生成・訂正・取消を行う。
+- `TUITION_PAYMENT_REGISTER`
+  - 月謝の入金を登録する。
+
+#### 経費・共有費
+
+- `OWN_SETTLEMENT_VIEW`
+  - 自分自身の共有費・精算状況を閲覧する。
+- `EXPENSE_VIEW_ALL`
+  - 教室全体の経費・共有費を閲覧する。
+- `EXPENSE_CREATE`
+  - 経費を登録する。
+- `EXPENSE_CONFIRM`
+  - 経費を確定する。
+- `EXPENSE_CANCEL`
+  - 確定済み経費を訂正・取消する。
+- `EXPENSE_ALLOCATION_MANAGE`
+  - 費用負担者および按分結果を確定・訂正する。
+- `SETTLEMENT_PAYMENT_REGISTER`
+  - 共有費に対する入金を登録する。
+
+#### 証憑
+
+- `EVIDENCE_CREATE`
+  - 証憑を登録する。
+- `EVIDENCE_VIEW`
+  - 証憑および証憑ファイルを閲覧する。
+- `EVIDENCE_CONFIRM`
+  - 証憑を `CONFIRMED` にする。
+- `EVIDENCE_REJECT`
+  - 確定前の証憑を `REJECTED` にする。
+- `EVIDENCE_INVALIDATE`
+  - 確定済み証憑を `INVALIDATED` にする。
+
+#### 教室運営・情報発信
+
+- `MONTHLY_MESSAGE_MANAGE`
+  - 「今月の一言」を登録・変更する。
+- `ANNOUNCEMENT_MANAGE`
+  - 教室のお知らせを登録・変更する。
+- `NOTIFICATION_SEND`
+  - 許可されたLINE通知等を送信する。
+
+#### 会員管理
+
+- `MEMBER_VIEW`
+  - 教室所属者の情報を閲覧する。
+- `MEMBER_MANAGE`
+  - 入会・休会・復帰・退会等の所属情報を管理する。
+
+#### 権限管理
+
+- `PERMISSION_MANAGE`
+  - Roleの付与・解除およびRole / Permissionに関する管理操作を行う。
+
+### Permissionの基本方針
+
+- Permissionは「誰であるか」ではなく「何を実行できるか」を表す。
+- 閲覧、登録、変更、確定、取消等について、業務上の影響が異なる場合はPermissionを分離する。
+- 自分自身の情報を扱うPermissionと、教室全体を扱うPermissionを区別する。
+- 金銭、証憑、個人情報および権限管理に関する重要操作は、明示的なPermissionによって認可する。
+- MVPでは必要以上にPermissionを細分化せず、業務上必要になった場合に追加できる構造とする。
+
+### BR-AUTH-004 Roleの教室単位付与
+
+- Roleは `PERSONS` に直接付与せず、原則として教室への所属を表す `CLASSROOM_MEMBERSHIPS` に対して付与する。
+- これにより、同一人物が所属する教室ごとに異なるRoleを持つことを可能とする。
+- 1つのMembershipには複数のRoleを付与できるものとする。
+- Roleの付与関係は `MEMBERSHIP_ROLES` で管理する。
+- RoleとPermissionの対応関係は `ROLE_PERMISSIONS` で管理する。
+- Permissionそのものは `PERMISSIONS` で管理する。
+- 認可判定では、対象人物だけでなく対象教室を特定し、その教室における有効なMembershipおよびRoleを基準とする。
+- ある教室で `ADMIN` Roleを持つ人物であっても、別の教室に対する権限を自動的に持たない。
+- 同一人物が、ある教室では `ADMIN`、別の教室では `MEMBER` となることを許容する。
+- MVPではRoleおよびPermissionを原則として教室単位で適用する。
+- 将来、複数教室を横断して管理する運営者権限が必要になった場合は、教室単位Roleとは別の上位権限モデルとして検討する。
+
+### BR-AUTH-005 Roleの付与・解除・再付与と履歴
+
+- Roleの付与・解除については、現在のRoleだけでなく過去の付与履歴を追跡できるようにする。
+- Roleの付与関係は `MEMBERSHIP_ROLES` で管理する。
+- `MEMBERSHIP_ROLES` では少なくとも以下を管理する。
+  - 対象Membership
+  - 対象Role
+  - 付与日時
+  - 付与者
+  - 解除日時
+  - 解除者
+  - 必要に応じて変更理由
+- Roleを付与した場合は、付与日時および付与者を記録する。
+- Roleを解除する場合は、対象レコードを物理削除せず、解除日時および解除者を記録する。
+- `revoked_at IS NULL` のRole付与を、現在有効なRoleとして扱う。
+- 一度解除したRoleを再度付与する場合は、過去の付与レコードを再利用せず、新しいRole付与レコードを作成する。
+- これにより、同一Roleについて複数の付与期間が存在することを許容する。
+- 認可判定では、現在有効なRoleのみを対象としてPermissionを取得する。
+- Roleの付与・解除を実行できるのは、対象教室において `PERMISSION_MANAGE` を持つ利用者とする。
+- Role付与履歴は物理削除によって失わないものとする。
+- MVPではRole変更履歴専用テーブルを別途設けず、`MEMBERSHIP_ROLES` の付与・解除期間そのものを履歴として保持する。
+- 将来、より詳細な変更監査が必要になった場合は、共通監査ログの導入を検討する。
+
+### BR-AUTH-006 ADMIN Roleの安全制約
+
+- 各教室には、原則として1名以上の有効な `ADMIN` Role保持者が存在しなければならない。
+- `ADMIN` Roleを解除する際、対象者がその教室における最後の有効な `ADMIN` である場合は、解除を許可しない。
+- 最後の `ADMIN` を変更する場合は、別のMembershipへ先に `ADMIN` Roleを付与した後、既存の `ADMIN` Roleを解除する。
+- 自分自身に付与されているRoleについても、権限を持つ利用者による変更を許容する。
+- ただし、自分自身の `ADMIN` Roleを解除した結果、その教室の有効な `ADMIN` が0名となる操作は禁止する。
+- Roleの付与・解除を実行する利用者は、対象教室において有効な `PERMISSION_MANAGE` を保持していなければならない。
+- `ADMIN` Roleは教室単位で有効とし、ある教室の `ADMIN` であることを理由として、別の教室の管理権限を与えない。
+- 最後の `ADMIN` の存在確認とRole解除は、一連の業務処理として整合性を保つ。
+- 同時操作等によって有効な `ADMIN` が0名となることを防止する。
+- 具体的なトランザクション制御および排他制御の方法は、D1物理設計・実装工程で決定する。
+
+### BR-AUTH-007 Web・LINE共通の認可
+
+- Web管理画面、LINE等の入力経路にかかわらず、同一のRole / Permission体系によって認可を行う。
+- LINE専用のRoleまたは別の権限体系は、MVPでは原則として設けない。
+- LINEから操作を受け付ける場合は、LINE User ID等の外部アカウント情報から `EXTERNAL_ACCOUNTS` を経由して `PERSONS` を特定する。
+- LINE User IDそのものを、人物ID、Membership、RoleまたはPermissionとして扱わない。
+- 認可判定では、少なくとも以下を特定する。
+  - 操作を行う人物
+  - 操作対象となる教室
+  - 操作に必要なPermission
+- LINEからの変更操作についても、対応するPermissionを保持している場合のみ実行を許可する。
+- LINEからの閲覧についても、Web管理画面と同じ閲覧Permissionを適用する。
+- LINE User IDからPERSONを特定できない場合、金銭、証憑、会員情報等に関する業務処理を自動実行しない。
+- LINE公式アカウントへの友だち追加だけを理由として、`CLASSROOM_MEMBERSHIPS` またはRoleを自動付与しない。
+- LINEグループから操作を受け付ける場合も、可能な限り送信者個人を特定し、その人物のPermissionを基準として認可する。
+- 個人の月謝、未収、共有費、証憑等の情報は、LINEグループへ返信しない。
+- 個人に関係する金銭情報は、原則として公式アカウントとの1対1通信または認証済みWeb画面で提供する。
+- WebとLINEで認可ロジックを個別にハードコードせず、共通の認可処理を利用できる構造とする。
+
+### BR-AUTH-008 本人情報と他者情報の認可
+
+- `OWN_*` 系Permissionは、認証された人物本人に帰属する情報のみを対象とする。
+- 本人判定は、ログインアカウントやLINE User IDそのものではなく、それらに紐付いた `PERSONS.person_id` を基準として行う。
+- 対象教室における有効なMembershipを確認したうえで、本人向けPermissionを適用する。
+
+- `OWN_TUITION_VIEW` は、本人に対して発生した月謝請求、入金、未収等の情報のみ閲覧可能とする。
+- `OWN_SETTLEMENT_VIEW` は、本人に対する共有費負担、請求、入金、未収等の情報のみ閲覧可能とする。
+- `OWN_ATTENDANCE_UPDATE` は、原則として本人自身の出欠予定のみ登録・変更可能とする。
+
+- `OWN_*` Permissionを持つことを理由として、他の会員の情報を閲覧・変更することはできない。
+- 教室全体または他者の情報を扱う場合は、対応する全体管理Permissionを必要とする。
+
+例：
+
+`OWN_TUITION_VIEW`
+→ 自分の月謝のみ閲覧可能
+
+`TUITION_VIEW_ALL`
+→ 権限を持つ対象教室の月謝情報を閲覧可能
+
+`OWN_ATTENDANCE_UPDATE`
+→ 自分の出欠のみ変更可能
+
+`ATTENDANCE_MANAGE`
+→ 権限を持つ対象教室の他参加者を含む出欠を管理可能
+
+- APIではPermissionの確認だけでなく、操作対象データが本人に帰属するかを必ず確認する。
+- クライアントから送信された `person_id` のみを信用して本人判定を行わない。
+- 認証済み利用者から特定した `person_id` と、操作対象データの所有者・負担者・対象者との関係をサーバ側で確認する。
+- URL、リクエスト本文、LINEメッセージ等の値を書き換えることで、他者情報へアクセスできないようにする。
+
+- ADMINやTEACHER等が他者情報を扱う場合も、対象教室に対する対応Permissionを保持していることを確認する。
+- ある教室で全体閲覧Permissionを持っていても、別教室の情報を閲覧できるものとはしない。
